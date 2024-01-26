@@ -1,0 +1,24 @@
+# -*- coding: UTF-8 -*-
+[Desktop Entry]
+Type=Service
+ServiceTypes=KonqPopupMenu/Plugin
+MimeType=all/all;
+Actions= default_action;
+X-KDE-StartupNotify=false
+X-KDE-Priority=TopLevel
+X-KDE-Submenu=
+Name=Taildrop
+# Add the path to your icon here
+Icon=/home/e/Themes/Icons/tailscale.png
+# Add the path to your script here
+Exec=/home/e/.config/dolphin_service_menus_creator/script_Taildrop.sh %F
+
+[Desktop Action default_action]
+X-KDE-Priority=TopLevel
+X-KDE-Submenu=
+Name=Taildrop
+# Add the path to your icon here
+Icon=/home/e/Themes/Icons/tailscale.png
+# Add the path to your script here
+Exec=/home/e/.config/dolphin_service_menus_creator/script_Taildrop.sh %F
+#attached_script=/home/e/.config/dolphin_service_menus_creator/script_Taildrop.sh
