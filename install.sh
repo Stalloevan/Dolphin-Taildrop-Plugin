@@ -49,14 +49,28 @@ ExecStart=tailscale file get --loop --verbose --conflict=rename "${taildrop_dir}
 [Install]
 WantedBy=default.target
 EOF
-
-  # Reload systemd daemon, start and check the status of the Taildrop service
-  systemctl --user daemon-reload
-  systemctl --user start tailreceive
-  systemctl --user status tailreceive
 }
 
-create_taildrop_script() {
+# Reloads the systemd daemon, starts the Taildrop service, and checks its status.
+reload_systemd_and_start_taildrop_service() {
+  systemctl --user daemon-reload
+  systemctl --user restart tailreceive
+}
+
+# Creates a file if it does not already exist.
+create_file_if_not_exists() {
+  local file=$1
+  if [[ ! -f ${file} ]]; then
+    mkdir -p "$(dirname "${file}")"
+    touch "${file}"
+  fi
+}
+
+# Generates a script for sending files via Taildrop.
+generate_taildrop_script() {
+  local taildrop_script=$1
+
+  create_file_if_not_exists "${taildrop_script}"
 
   cat << 'EOF' > "${taildrop_script}"
   local friendly_name_list status_output device_list
@@ -127,8 +141,10 @@ EOF
 
 # Generates or updates a .desktop file for integrating Taildrop with the KDE service menu.
 create_desktop_file() {
-  local desktop_file_path="${HOME}/.local/share/kservices5/ServiceMenus/Taildrop.desktop"
-  local taildrop_script="taildrop"
+  local taildrop_script=$1
+  local desktop_file_path=$2
+
+  create_file_if_not_exists "${desktop_file_path}"
 
   # Create or update the .desktop file
   cat << EOF > "${desktop_file_path}"
@@ -143,30 +159,27 @@ X-KDE-Priority=TopLevel
 X-KDE-Submenu=
 Name=Taildrop
 Icon=${HOME}/Themes/Icons/tailscale.png
-Exec=${HOME}/.config/dolphin_service_menus_creator/$taildrop_script.sh %F
+Exec=${HOME}/.config/dolphin_service_menus_creator/${taildrop_script}.sh %F
 
 [Desktop Action default_action]
 X-KDE-Priority=TopLevel
 X-KDE-Submenu=
 Name=Send via Taildrop
 Icon=${HOME}/Themes/Icons/tailscale.png
-Exec=${HOME}/.config/dolphin_service_menus_creator/$taildrop_script.sh %F
+Exec=${HOME}/.config/dolphin_service_menus_creator/${taildrop_script}.sh %F
 EOF
 }
 
 # Main function
 main() {
-  # Download icon
+  local taildrop_script="${HOME}/.config/dolphin_service_menus_creator/taildrop_script.sh"
+  local desktop_file_path="${HOME}/.local/share/kservices5/ServiceMenus/Taildrop.desktop"
+
   download_icon
-
-  # Create taildrop script
-  create_taildrop_script
-
-  # Create or update the .desktop file
-  create_desktop_file
-
-  # Setup Taildrop service
+  generate_taildrop_script "${taildrop_script}"
+  create_desktop_file "${taildrop_script}" "${desktop_file_path}"
   setup_taildrop_service
+  reload_systemd_and_start_taildrop_service
 }
 
 main "$@"
