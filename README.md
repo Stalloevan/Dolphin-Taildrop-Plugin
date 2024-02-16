@@ -1,4 +1,4 @@
-# Forked Taildrop Plugin for Dolphin File Explorer
+# Taildrop Plugin - Dolphin File Explorer Fork
 
 This bash script and accompanying desktop file are designed to facilitate file transfers over the [Tailscale](https://tailscale.com/) network. It leverages Tailscale's features interactively choose a device from the network and securely transfer files to that chosen device via the Taildrop service.
 
