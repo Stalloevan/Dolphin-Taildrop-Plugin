@@ -81,70 +81,78 @@ generate_taildrop_script() {
   cat << 'EOF' > "${taildrop_script}"
 #!/usr/bin/env bash
 
-#!/usr/bin/env bash
-
-# Main function
+# Simple wrapper around the tailscale CLI to send files to a device.
 main() {
-  # Use associative array to store device status to simplify logic
-  declare -A device_status_map
+  # Get the status of all devices
   local status_output
   status_output=$(tailscale status)
-  local friendly_name
-  local device_list=()
+  declare -A device_status_map
 
-  # Parse and fill associative array with device status
   local line
   while read -r line; do
+    local friendly_name
     friendly_name=$(echo "${line}" | awk '{print $2}')
     if [[ -n "${friendly_name}" ]]; then
-      # Directly check connectivity and assign status
-      if tailscale ping --timeout=0.01s "${friendly_name}" &>/dev/null; then
-        device_status_map["${friendly_name}"]=on
-      else
-        device_status_map["${friendly_name}"]=off
-      fi
+      # Assume device is online. To be checked individually later
+      device_status_map["${friendly_name}"]="unknown"
     fi
   done <<< "${status_output}"
 
-  # Prepare device list for dialog, marking status
+  # Prepare the device list for the dialog
+  local device_list=()
   local name
   for name in "${!device_status_map[@]}"; do
-    device_list+=("${name}" "${name}" "${device_status_map[${name}]}")
+    device_list+=("${name}" "${name}" "off") # Initial state is off. This is updated on the actual check
   done
 
-  # Use kdialog to choose a device
+  # Let the user select a device
   local chosen_device
   chosen_device=$(kdialog --title 'Taildrop' --radiolist "Choose Device" "${device_list[@]}" --geometry 200x50)
-
   if [[ -z "${chosen_device}" ]]; then
     echo "No device selected."
     exit 1
   fi
 
-  # Re-check if device is connected before proceeding
-  if tailscale ping --timeout=0.01s "${chosen_device}" &>/dev/null; then
-    local list_names=""
-    # Process each file provided as argument
-    local file
-    for file in "$@"; do
-      if [[ -f "${file}" ]]; then # Ensure it's a file
-        tailscale file cp "${file}" "${chosen_device}":
-        # Append file name to list for notification
-        list_names+="${file##*/}, "
-      fi
-    done
-
-    # Trim trailing comma and space
-    list_names="${list_names%, }"
-
-    # Show notification of delivered files
-    kdialog --title 'Taildrop' --passivepopup "Files delivered: ${list_names}" --icon "${HOME}/Themes/Icons/tailscale.png"
-  else
+  # Check if the chosen device is online
+  if ! tailscale ping --timeout=1s "${chosen_device}" &>/dev/null; then
     kdialog --title 'Taildrop' --passivepopup "Device '${chosen_device}' is offline" --icon "${HOME}/Themes/Icons/tailscale.png"
+    exit 1
+  fi
+
+  local list_names=""
+  local file
+  for file in "$@"; do
+    if [[ -d "${file}" ]]; then
+      # Handle directories by creating a temporary archive
+      local tmp_archive
+      tmp_archive="$(mktemp -u).tar.gz"
+      tar -czf "${tmp_archive}" -C "$(dirname "${file}")" "${file##*/}"
+
+      if tailscale file cp "${tmp_archive}" "${chosen_device}": &>/dev/null; then
+        list_names+="${file##*/} (directory), "
+        rm -f "${tmp_archive}" # Clean up the temporary archive after sending
+      else
+        echo "Failed to send directory ${file}"
+      fi
+    elif [[ -f "${file}" ]]; then
+      if tailscale file cp "${file}" "${chosen_device}": &>/dev/null; then
+        list_names+="${file##*/}, "
+      else
+        echo "Failed to send file ${file}"
+      fi
+    else
+      echo "${file} is not a valid file or directory"
+    fi
+  done
+
+  list_names="${list_names%, }" # Trim the trailing comma and space
+  if [[ -n "${list_names}" ]]; then
+    kdialog --title 'Taildrop' --passivepopup "Successfully sent: ${list_names}" --icon "${HOME}/Themes/Icons/tailscale.png"
   fi
 }
 
 main "$@"
+
 EOF
   make_executable "${taildrop_script}"
 }
