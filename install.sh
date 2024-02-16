@@ -1,17 +1,38 @@
 #!/usr/bin/env bash
 
+# Reloads the systemd daemon, starts the Taildrop service, and checks its status.
+reload_systemd_and_start_taildrop_service() {
+  systemctl --user daemon-reload
+  systemctl --user restart tailreceive
+}
+
+# Creates a file if it does not already exist.
+create_file_if_not_exists() {
+  local file=$1
+  if [[ ! -f ${file} ]]; then
+    mkdir -p "$(dirname "${file}")"
+    touch "${file}"
+  fi
+}
+
+# Makes a file executable.
+make_executable() {
+  local file=$1
+  chmod +x "${file}"
+}
+
 # Downloads the Tailscale icon if it does not already exist in the specified path.
 download_icon() {
   local icon_path="${HOME}/Themes/Icons/tailscale.png"
   if [[ ! -f ${icon_path}   ]]; then
     echo "Downloading Tailscale icon..."
-        mkdir -p "$(dirname "${icon_path}")"
+    mkdir -p "$(dirname "${icon_path}")"
     curl -L "https://raw.githubusercontent.com/error-try-again/KDE-Dolphin-TailDrop-Plugin/main/tailscale.png" -o "${icon_path}"
   fi
 }
 
 # Configures Tailscale for receiving files via Taildrop by setting up a systemd service.
-setup_taildrop_service() {
+generate_taildrop_service() {
   echo "Setting up Tailscale for Taildrop..."
 
     # Elevate privileges to configure Tailscale with admin rights.
@@ -25,7 +46,7 @@ setup_taildrop_service() {
     mkdir -p "${systemd_dir}" "${taildrop_dir}"
 
     # Define and create the systemd service file for managing Taildrop file reception.
-    create_tailreceive_service "${systemd_dir}" "${taildrop_dir}"
+    generate_tailreceive_service "${systemd_dir}" "${taildrop_dir}"
 
     # Enable and start the service, then display its status.
     systemctl --user daemon-reload
@@ -34,7 +55,7 @@ setup_taildrop_service() {
 }
 
 # Creates a systemd service file for Taildrop in the specified systemd directory, targeting the Taildrop directory.
-create_tailreceive_service() {
+generate_tailreceive_service() {
     local systemd_dir=$1
     local taildrop_dir=$2
 
@@ -51,21 +72,6 @@ WantedBy=default.target
 EOF
 }
 
-# Reloads the systemd daemon, starts the Taildrop service, and checks its status.
-reload_systemd_and_start_taildrop_service() {
-  systemctl --user daemon-reload
-  systemctl --user restart tailreceive
-}
-
-# Creates a file if it does not already exist.
-create_file_if_not_exists() {
-  local file=$1
-  if [[ ! -f ${file} ]]; then
-    mkdir -p "$(dirname "${file}")"
-    touch "${file}"
-  fi
-}
-
 # Generates a script for sending files via Taildrop.
 generate_taildrop_script() {
   local taildrop_script=$1
@@ -73,6 +79,9 @@ generate_taildrop_script() {
   create_file_if_not_exists "${taildrop_script}"
 
   cat << 'EOF' > "${taildrop_script}"
+#!/usr/bin/env bash
+
+main() {
   local friendly_name_list status_output device_list
   status_output=$(tailscale status)
   friendly_name_list=()
@@ -111,7 +120,6 @@ generate_taildrop_script() {
   # Check again to see if device is connected
   ping=$(tailscale ping --timeout .01s "${chosen_device}")
   if [[ ${ping} == *pong* ]]; then
-
     # Loop through selected items in Dolphin
     local file
     for file in "$@"; do
@@ -132,15 +140,20 @@ generate_taildrop_script() {
     done
 
     # Show notification
-    kdialog --title 'Taildrop' --passivepopup "$(echo $"${list[@]}" 'delivered')" --icon file:///home/e/Themes/Icons/tailscale.png
+    kdialog --title 'Taildrop' --passivepopup "$(echo $"${list[@]}" 'delivered')" --icon file:///${HOME}/Themes/Icons/tailscale.png
   else
-    kdialog --title 'Taildrop' --passivepopup "$(echo $"${chosen_device}" 'is offline')" --icon file:///home/e/Themes/Icons/tailscale.png
+    kdialog --title 'Taildrop' --passivepopup "$(echo $"${chosen_device}" 'is offline')" --icon file:///${HOME}/Themes/Icons/tailscale.png
   fi
+}
+
+main "$@"
+
 EOF
+  make_executable "${taildrop_script}"
 }
 
 # Generates or updates a .desktop file for integrating Taildrop with the KDE service menu.
-create_desktop_file() {
+generate_dot_desktop_file() {
   local taildrop_script=$1
   local desktop_file_path=$2
 
@@ -159,14 +172,14 @@ X-KDE-Priority=TopLevel
 X-KDE-Submenu=
 Name=Taildrop
 Icon=${HOME}/Themes/Icons/tailscale.png
-Exec=${HOME}/.config/dolphin_service_menus_creator/${taildrop_script}.sh %F
+Exec=${taildrop_script} %F
 
 [Desktop Action default_action]
 X-KDE-Priority=TopLevel
 X-KDE-Submenu=
 Name=Send via Taildrop
 Icon=${HOME}/Themes/Icons/tailscale.png
-Exec=${HOME}/.config/dolphin_service_menus_creator/${taildrop_script}.sh %F
+Exec=${taildrop_script} %F
 EOF
 }
 
@@ -177,8 +190,8 @@ main() {
 
   download_icon
   generate_taildrop_script "${taildrop_script}"
-  create_desktop_file "${taildrop_script}" "${desktop_file_path}"
-  setup_taildrop_service
+  generate_dot_desktop_file "${taildrop_script}" "${desktop_file_path}"
+  generate_taildrop_service
   reload_systemd_and_start_taildrop_service
 }
 
