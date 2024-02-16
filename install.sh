@@ -1,33 +1,64 @@
 #!/usr/bin/env bash
 
-# Main function
-main() {
-  # Define the path for the .desktop file
-  local desktop_file_path="${HOME}/.local/share/kservices5/ServiceMenus/Taildrop.desktop"
+# Downloads the Tailscale icon if it does not already exist in the specified path.
+download_icon() {
+  local icon_path="${HOME}/Themes/Icons/tailscale.png"
+  if [[ ! -f ${icon_path}   ]]; then
+    echo "Downloading Tailscale icon..."
+        mkdir -p "$(dirname "${icon_path}")"
+    curl -L "https://raw.githubusercontent.com/error-try-again/KDE-Dolphin-TailDrop-Plugin/main/tailscale.png" -o "${icon_path}"
+  fi
+}
 
-  # Create or update the .desktop file using a heredoc
-  cat << EOF > "${desktop_file_path}"
-# -*- coding: UTF-8 -*-
-[Desktop Entry]
-Type=Service
-ServiceTypes=KonqPopupMenu/Plugin
-MimeType=all/all;
-Actions=default_action;
-X-KDE-StartupNotify=false
-X-KDE-Priority=TopLevel
-X-KDE-Submenu=
-Name=Taildrop
-Icon=\$HOME/Themes/Icons/tailscale.png
-Exec=\$HOME/.config/dolphin_service_menus_creator/script_Taildrop.sh %F
+# Configures Tailscale for receiving files via Taildrop by setting up a systemd service.
+setup_taildrop_service() {
+  echo "Setting up Tailscale for Taildrop..."
 
-[Desktop Action default_action]
-X-KDE-Priority=TopLevel
-X-KDE-Submenu=
-Name=Taildrop
-Icon=\$HOME/Themes/Icons/tailscale.png
-Exec=\$HOME/.config/dolphin_service_menus_creator/script_Taildrop.sh %F
+    # Elevate privileges to configure Tailscale with admin rights.
+  sudo tailscale up --operator="${USER}"
+
+  # Define directory for systemd unit files and Taildrop download directory
+  local systemd_dir="${HOME}/.config/systemd/user"
+  local taildrop_dir="${HOME}/Taildrops"
+
+    # Ensure the required directories exist.
+    mkdir -p "${systemd_dir}" "${taildrop_dir}"
+
+    # Define and create the systemd service file for managing Taildrop file reception.
+    create_tailreceive_service "${systemd_dir}" "${taildrop_dir}"
+
+    # Enable and start the service, then display its status.
+    systemctl --user daemon-reload
+    systemctl --user enable --now tailreceive
+    systemctl --user status tailreceive
+}
+
+# Creates a systemd service file for Taildrop in the specified systemd directory, targeting the Taildrop directory.
+create_tailreceive_service() {
+    local systemd_dir=$1
+    local taildrop_dir=$2
+
+  cat << EOF > "${systemd_dir}/tailreceive.service"
+[Unit]
+Description=File Receiver Service for Taildrop
+
+[Service]
+UMask=0077
+ExecStart=tailscale file get --loop --verbose --conflict=rename "${taildrop_dir}"
+
+[Install]
+WantedBy=default.target
 EOF
 
+  # Reload systemd daemon, start and check the status of the Taildrop service
+  systemctl --user daemon-reload
+  systemctl --user start tailreceive
+  systemctl --user status tailreceive
+}
+
+create_taildrop_script() {
+
+  cat << 'EOF' > "${taildrop_script}"
   local friendly_name_list status_output device_list
   status_output=$(tailscale status)
   friendly_name_list=()
@@ -91,6 +122,51 @@ EOF
   else
     kdialog --title 'Taildrop' --passivepopup "$(echo $"${chosen_device}" 'is offline')" --icon file:///home/e/Themes/Icons/tailscale.png
   fi
+EOF
+}
+
+# Generates or updates a .desktop file for integrating Taildrop with the KDE service menu.
+create_desktop_file() {
+  local desktop_file_path="${HOME}/.local/share/kservices5/ServiceMenus/Taildrop.desktop"
+  local taildrop_script="taildrop"
+
+  # Create or update the .desktop file
+  cat << EOF > "${desktop_file_path}"
+# -*- coding: UTF-8 -*-
+[Desktop Entry]
+Type=Service
+ServiceTypes=KonqPopupMenu/Plugin
+MimeType=all/all;
+Actions=default_action;
+X-KDE-StartupNotify=false
+X-KDE-Priority=TopLevel
+X-KDE-Submenu=
+Name=Taildrop
+Icon=${HOME}/Themes/Icons/tailscale.png
+Exec=${HOME}/.config/dolphin_service_menus_creator/$taildrop_script.sh %F
+
+[Desktop Action default_action]
+X-KDE-Priority=TopLevel
+X-KDE-Submenu=
+Name=Send via Taildrop
+Icon=${HOME}/Themes/Icons/tailscale.png
+Exec=${HOME}/.config/dolphin_service_menus_creator/$taildrop_script.sh %F
+EOF
+}
+
+# Main function
+main() {
+  # Download icon
+  download_icon
+
+  # Create taildrop script
+  create_taildrop_script
+
+  # Create or update the .desktop file
+  create_desktop_file
+
+  # Setup Taildrop service
+  setup_taildrop_service
 }
 
 main "$@"
