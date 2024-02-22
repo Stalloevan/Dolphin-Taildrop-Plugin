@@ -5,7 +5,7 @@ This bash script is designed to facilitate file transfers over the [Tailscale](h
 ## Prerequisites
 
 - [Tailscale](https://tailscale.com/download/linux) installed and configured on your system.
-- [KDE Plasma](https://tailscale.com/download/linux) installed and configured on your system.
+- [KDE Plasma](https://kde.org/plasma-desktop/) installed and configured on your system.
 
 ## Usage
 `curl -fsSL https://raw.githubusercontent.com/error-try-again/KDE-Dolphin-TailDrop-Plugin/main/install.sh | bash`
