@@ -1,11 +1,11 @@
-# Taildrop Plugin - Dolphin File Explorer Fork
+# Taildrop Plugin - Dolphin File Explorer
 
 This bash script is designed to facilitate file transfers over the [Tailscale](https://tailscale.com/) network on Linux/KDE/Dolphin. It leverages Tailscale's features to interactively choose a device from the network and securely transfer files to that chosen device via the Taildrop service. 
 
 ## Prerequisites
 
-- [Tailscale](https://tailscale.com/download/linux) installed and configured on your system.
 - [KDE Plasma](https://kde.org/plasma-desktop/) installed and configured on your system.
+- [Tailscale](https://tailscale.com/download/linux) installed and configured on your system.
 
 ## Usage
 `curl -fsSL https://raw.githubusercontent.com/error-try-again/KDE-Dolphin-TailDrop-Plugin/main/install.sh | bash`
@@ -17,3 +17,11 @@ This bash script is designed to facilitate file transfers over the [Tailscale](h
 - **Interactive Device Selection:** Users can choose a device interactively from the list for secure file transfers.
 
 - **Real-time Notifications:** The script provides real-time notifications on the success or failure of file transfers.
+
+## Contributors
+
+**Original Script and Review** - 
+[@Stalloevan](https://github.com/Stalloevan)
+
+**Installer and Optimization** - 
+[@error-try-again](https://github.com/error-try-again)
