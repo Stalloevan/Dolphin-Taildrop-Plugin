@@ -114,7 +114,7 @@ main() {
   fi
 
   # Check if the chosen device is online
-  if ! tailscale ping --timeout=1s "${chosen_device}" &>/dev/null; then
+  if ! tailscale ping -c 1 "${chosen_device}" &>/dev/null; ; then
     kdialog --title 'Taildrop' --passivepopup "Device '${chosen_device}' is offline" --icon "${HOME}/Themes/Icons/tailscale.png"
     exit 1
   fi
