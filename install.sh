@@ -83,72 +83,111 @@ generate_taildrop_script() {
 
 # Simple wrapper around the tailscale CLI to send files to a device.
 main() {
-  # Get the status of all devices
-  local status_output
-  status_output=$(tailscale status)
-  declare -A device_status_map
-
-  local line
-  while read -r line; do
-    local friendly_name
-    friendly_name=$(echo "${line}" | awk '{print $2}')
-    if [[ -n "${friendly_name}" ]]; then
-      # Assume device is online. To be checked individually later
-      device_status_map["${friendly_name}"]="unknown"
+    # Get the status of all devices on tailnet
+    status_output=$(tailscale status)
+    
+    # Initialize lists
+    name_list=()
+    device_list=()
+    
+    # Record devices
+    while IFS= read -r line
+    do
+        # Extract friendly name
+        friendly_name=$(echo "${line}" | awk '{print $2}')
+    
+        if [[ -n "${friendly_name}" ]]; then
+            name_list+=("${friendly_name}")
+        fi
+    done <<< "${status_output}"
+    
+    # Test to see variable output
+    echo "${status_output}"
+    echo "${name_list[@]}"
+    echo ""
+    
+    # Only include online external devices in the list
+    # Find host name
+    host=$(hostname)
+    # Convert to lowercase
+    host="${host,,}"
+    
+    for name in "${name_list[@]}"
+    do
+        if [[ "${name}" != "${host}" ]]; then
+            echo "${name}"
+            # Add the friendly name to the list with 'on' state
+            device_list+=("${name}" "${name}" on)
+        fi
+    done
+    
+    # Test to see variable output
+    echo "${device_list[@]}"
+    echo ""
+    
+    # Let the user select a device
+    # Determine dialog height based upon number of devices
+    height=$((16 * ${#device_list[@]}))
+    echo "$height"
+    chosen_device=$(kdialog --title 'Taildrop' --radiolist "Choose Device" "${device_list[@]}" --geometry 200x"${height}")
+    
+    # Display popup if no device is selected
+    if [[ -z "${chosen_device}" ]]; then
+        kdialog --title 'Taildrop' --passivepopup "No device selected" --icon "${HOME}/Themes/Icons/tailscale.png"
+        exit 1
     fi
-  done <<< "${status_output}"
-
-  # Prepare the device list for the dialog
-  local device_list=()
-  local name
-  for name in "${!device_status_map[@]}"; do
-    device_list+=("${name}" "${name}" "off") # Initial state is off. This is updated on the actual check
-  done
-
-  # Let the user select a device
-  local chosen_device
-  chosen_device=$(kdialog --title 'Taildrop' --radiolist "Choose Device" "${device_list[@]}" --geometry 200x50)
-  if [[ -z "${chosen_device}" ]]; then
-    echo "No device selected."
-    exit 1
-  fi
-
-  # Check if the chosen device is online
-  if ! tailscale ping -c 1 "${chosen_device}" &>/dev/null; ; then
-    kdialog --title 'Taildrop' --passivepopup "Device '${chosen_device}' is offline" --icon "${HOME}/Themes/Icons/tailscale.png"
-    exit 1
-  fi
-
-  local list_names=""
-  local file
-  for file in "$@"; do
-    if [[ -d "${file}" ]]; then
-      # Handle directories by creating a temporary archive
-      local tmp_archive
-      tmp_archive="$(mktemp -u).tar.gz"
-      tar -czf "${tmp_archive}" -C "$(dirname "${file}")" "${file##*/}"
-
-      if tailscale file cp "${tmp_archive}" "${chosen_device}": &>/dev/null; then
-        list_names+="${file##*/} (directory), "
-        rm -f "${tmp_archive}" # Clean up the temporary archive after sending
-      else
-        echo "Failed to send directory ${file}"
-      fi
-    elif [[ -f "${file}" ]]; then
-      if tailscale file cp "${file}" "${chosen_device}": &>/dev/null; then
-        list_names+="${file##*/}, "
-      else
-        echo "Failed to send file ${file}"
-      fi
-    else
-      echo "${file} is not a valid file or directory"
+    
+    for file in "$@"
+    do
+        # If sending a folder
+        if [[ -d "${file}" ]]; then
+    
+            # Create a temporary archive
+            tmp_archive="$(mktemp -u).zip"
+            zip -czf "${tmp_archive}" -C "$(dirname "${file}")" "${file##*/}"
+    
+            # If directory is sent, add name to list
+            if tailscale file cp "${tmp_archive}" "${chosen_device}": &>/dev/null; then
+                list_names+="${file##*/} (directory), "
+    
+                # Remove the temporary archive after sending
+                rm -f "${tmp_archive}"
+    
+                # Check to see if file was delivered
+                if ! tailscale ping -c 1 "${chosen_device}" &>/dev/null; ; then
+                    kdialog --title 'Taildrop' --passivepopup "'${file}' folder not delivered" --icon "${HOME}/Themes/Icons/tailscale.png"
+                    exit 1
+                fi
+            else
+                kdialog --title 'Taildrop' --passivepopup "${file} folder not sent" --icon "${HOME}/Themes/Icons/tailscale.png"
+            fi
+    
+        # If sending a file
+        elif [[ -f "${file}" ]]; then
+            # If file is sent, add name to list
+            if tailscale file cp "${file}" "${chosen_device}": &>/dev/null; then
+            list_names+="${file##*/}, "
+    
+                # Check to see if file was delivered
+                if ! tailscale ping -c 1 "${chosen_device}" &>/dev/null; ; then
+                    kdialog --title 'Taildrop' --passivepopup "'${file}' not delivered" --icon "${HOME}/Themes/Icons/tailscale.png"
+                    exit 1
+                fi
+            else
+                kdialog --title 'Taildrop' --passivepopup "${file} not sent" --icon "${HOME}/Themes/Icons/tailscale.png"
+                exit 1
+            fi
+        else
+            kdialog --title 'Taildrop' --passivepopup "${file} is not a valid file or directory" --icon "${HOME}/Themes/Icons/tailscale.png"
+            exit 1
+        fi
+    done
+    
+    list_names="${list_names%, }" # Trim the trailing comma and space
+    if [[ -n "${list_names}" ]]; then
+        kdialog --title 'Taildrop' --passivepopup "${list_names} sent successfully" --icon "${HOME}/Themes/Icons/tailscale.png"
     fi
-  done
 
-  list_names="${list_names%, }" # Trim the trailing comma and space
-  if [[ -n "${list_names}" ]]; then
-    kdialog --title 'Taildrop' --passivepopup "Successfully sent: ${list_names}" --icon "${HOME}/Themes/Icons/tailscale.png"
-  fi
 }
 
 main "$@"
