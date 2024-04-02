@@ -84,7 +84,7 @@ generate_taildrop_script() {
 # Simple wrapper around the tailscale CLI to send files to a device.
 main() {
     # Get the status of all devices on tailnet
-    status_output=$(tailscale status)
+    status_output=$(tailscale status --self=false)
     
     # Initialize lists
     name_list=()
@@ -106,19 +106,10 @@ main() {
     echo "${name_list[@]}"
     echo ""
     
-    # Only include online external devices in the list
-    # Find host name
-    host=$(hostname)
-    # Convert to lowercase
-    host="${host,,}"
-    
     for name in "${name_list[@]}"
     do
-        if [[ "${name}" != "${host}" ]]; then
-            echo "${name}"
-            # Add the friendly name to the list with 'on' state
-            device_list+=("${name}" "${name}" on)
-        fi
+        # Add the friendly name to the list with 'on' state
+        device_list+=("${name}" "${name}" on)
     done
     
     # Test to see variable output
