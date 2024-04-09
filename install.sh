@@ -40,7 +40,7 @@ generate_taildrop_service() {
 
   # Define directory for systemd unit files and Taildrop download directory
   local systemd_dir="${HOME}/.config/systemd/user"
-  local taildrop_dir="${HOME}/Taildrops"
+  local taildrop_dir="${HOME}/Share"
 
     # Ensure the required directories exist.
     mkdir -p "${systemd_dir}" "${taildrop_dir}"
